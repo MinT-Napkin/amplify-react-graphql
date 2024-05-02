@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import "@aws-amplify/ui-react/styles.css";
-import { generateClient } from 'aws-amplify/api'
-import { Storage } from 'aws-amplify';
 import {
   Button,
   Flex,
   Heading,
-  Image,
   Text,
   TextField,
+  Image,
   View,
   withAuthenticator,
-} from '@aws-amplify/ui-react';
+} from "@aws-amplify/ui-react";
 import { listNotes } from "./graphql/queries";
 import {
   createNote as createNoteMutation,
   deleteNote as deleteNoteMutation,
 } from "./graphql/mutations";
+import { generateClient } from 'aws-amplify/api';
+import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 
 const client = generateClient();
 
@@ -34,14 +34,15 @@ const App = ({ signOut }) => {
     await Promise.all(
       notesFromAPI.map(async (note) => {
         if (note.image) {
-          const url = await Storage.get(note.name);
-          note.image = url;
+          const url = await getUrl({ key: note.name });
+          note.image = url.url;  
         }
         return note;
       })
     );
     setNotes(notesFromAPI);
   }
+
   async function createNote(event) {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -51,7 +52,10 @@ const App = ({ signOut }) => {
       description: form.get("description"),
       image: image.name,
     };
-    if (!!data.image) await Storage.put(data.name, image);
+    if (!!data.image) await uploadData({
+      key: data.name,
+      data: image
+    });
     await client.graphql({
       query: createNoteMutation,
       variables: { input: data },
@@ -63,7 +67,7 @@ const App = ({ signOut }) => {
   async function deleteNote({ id, name }) {
     const newNotes = notes.filter((note) => note.id !== id);
     setNotes(newNotes);
-    await Storage.remove(name);
+    await remove({ key: name });
     await client.graphql({
       query: deleteNoteMutation,
       variables: { input: { id } },
@@ -115,6 +119,13 @@ const App = ({ signOut }) => {
               {note.name}
             </Text>
             <Text as="span">{note.description}</Text>
+            {note.image && (
+              <Image
+                src={note.image}
+                alt={`visual aid for ${note.name}`}
+                style={{ width: 400 }}
+              />
+            )}
             <Button variation="link" onClick={() => deleteNote(note)}>
               Delete note
             </Button>
